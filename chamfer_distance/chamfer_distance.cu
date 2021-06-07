@@ -15,13 +15,26 @@ void ChamferDistanceKernel(
 {
 	const int batch=512;
 	__shared__ float buf[batch*3];
-	for (int i=blockIdx.x;i<b;i+=gridDim.x){
-		for (int k2=0;k2<m;k2+=batch){
+	for (int i=blockIdx.x;i<b;i+=gridDim.x){	// for xyz[i, :, :] (Batch No.i)
+
+		/* 
+		* split xyz2 into batches of size 512,  and then 
+		* find the nearest neighbor in xyz2[k2:(k2+512)] for each point in xyz
+		*/
+		for (int k2=0;k2<m;k2+=batch){			// for each xyz2 batch
+
+			/* 
+			* cache xyz2[k2:(k2+512)] into shared memory for each block
+			*/
 			int end_k=min(m,k2+batch)-k2;
 			for (int j=threadIdx.x;j<end_k*3;j+=blockDim.x){
 				buf[j]=xyz2[(i*m+k2)*3+j];
 			}
 			__syncthreads();
+
+			/* 
+			* for each point in xyz find the nearest neighbor in xyz2[k2:(k2+512)] 
+			*/
 			for (int j=threadIdx.x+blockIdx.y*blockDim.x;j<n;j+=blockDim.x*gridDim.y){
 				float x1=xyz[(i*n+j)*3+0];
 				float y1=xyz[(i*n+j)*3+1];

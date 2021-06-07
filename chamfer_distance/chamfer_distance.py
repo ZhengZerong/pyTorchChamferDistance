@@ -4,7 +4,15 @@ import torch
 from torch.utils.cpp_extension import load
 cd = load(name="cd",
           sources=["chamfer_distance/chamfer_distance.cpp",
-                   "chamfer_distance/chamfer_distance.cu"])
+                   "chamfer_distance/chamfer_distance.cu"],
+          # extra_include_paths=["E:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\include",
+          #                      "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.18362.0\\shared",
+          #                      "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.18362.0\\ucrt",
+          #                      ],
+          # extra_cflags=["-DWIN32", "-DWIN64"],
+          # extra_cuda_cflags=["-DWIN32", "-DWIN64"],
+          # extra_ldflags=["/NODEFAULTLIB:LIBCMT.LIB"],
+          verbose=True)
 
 class ChamferDistanceFunction(torch.autograd.Function):
     @staticmethod
@@ -53,11 +61,26 @@ class ChamferDistanceFunction(torch.autograd.Function):
 
 
 class ChamferDistance(torch.nn.Module):
+    def __init__(self):
+        super(ChamferDistance, self).__init__()
+
     def forward(self, xyz1, xyz2):
         return ChamferDistanceFunction.apply(xyz1, xyz2)
 
+
 class ChamferDistanceLoss(torch.nn.Module):
-    def forward(self, xyz1, xyz2):
-        dist = ChamferDistance(xyz1, xyz2)
-        l = torch.mean(dist[0]) + torch.mean(dist[1])
-        return l
+    def __init__(self, reduction=None):
+        super(ChamferDistanceLoss, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, xyz1, xyz2, w1=None, w2=None):
+        dist = list(ChamferDistanceFunction.apply(xyz1, xyz2))
+        if w1 is not None:
+            dist[0] = dist[0] * w1
+        if w2 is not None:
+            dist[1] = dist[1] * w2
+
+        if self.reduction is None or self.reduction == "mean":
+            return torch.mean(dist[0]) + torch.mean(dist[1])
+        else:
+            return torch.sum(dist[0]) + torch.sum(dist[1])
